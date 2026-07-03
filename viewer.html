@@ -1,0 +1,70 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXUS · Engine Viewer</title><style>
+:root{--bg:#0a0e14;--pnl:#111823;--ln:#1c2735;--mu:#5b6b7f;--mu2:#8aa0b6;--cy:#35d0ba;--g:#2ecc71;--rd:#ff5a6a;--or:#ffa94d;--ye:#ffd54f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#dfe8f2;font:13px/1.5 ui-monospace,Menlo,monospace}
+.wrap{max-width:1100px;margin:0 auto;padding:18px}
+h1{font-size:15px;letter-spacing:3px;margin:0 0 2px;color:var(--cy)}.sub{color:var(--mu);font-size:11px;margin-bottom:14px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+input,button{background:var(--pnl);border:1px solid var(--ln);color:#dfe8f2;border-radius:8px;padding:8px 10px;font:inherit}
+button{cursor:pointer}button:hover{border-color:var(--cy)}#url{flex:1;min-width:240px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px}
+.card{background:var(--pnl);border:1px solid var(--ln);border-radius:10px;padding:10px 12px}
+.k{color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:1px}.v{font-size:18px;margin-top:2px}
+.sec{background:var(--pnl);border:1px solid var(--ln);border-radius:10px;padding:12px;margin-bottom:12px}
+.sec h2{font-size:11px;letter-spacing:2px;color:var(--mu2);margin:0 0 8px;text-transform:uppercase}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--ln);font-size:12px}
+th{color:var(--mu);font-weight:400;font-size:10px;text-transform:uppercase}
+.pos{color:var(--g)}.neg{color:var(--rd)}.tag{padding:1px 6px;border-radius:5px;font-size:10px;border:1px solid var(--ln)}
+#log{font-size:11px;color:var(--mu2);max-height:240px;overflow:auto;white-space:pre-wrap}
+.pill{padding:2px 8px;border-radius:20px;font-size:10px;border:1px solid var(--ln)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+</style></head><body><div class="wrap">
+<h1>◇ NEXUS ENGINE VIEWER</h1><div class="sub">read-only — reflects the headless server engine. This page never trades.</div>
+<div class="bar">
+  <input id="url" placeholder="https://nexus-proxy-tj.onrender.com" />
+  <button onclick="save()">Connect</button>
+  <span id="conn" class="pill">…</span>
+  <span style="flex:1"></span>
+  <button onclick="ctl('auto-on')">AUTO on</button>
+  <button onclick="ctl('auto-off')">AUTO off</button>
+  <button onclick="ctl('flatten')" style="border-color:var(--rd);color:var(--rd)">Flatten</button>
+</div>
+<div class="grid" id="stats"></div>
+<div class="sec"><h2>Open Positions</h2><div id="open">—</div></div>
+<div class="sec"><h2>Recent Closed</h2><div id="closed">—</div></div>
+<div class="sec"><h2>Engine Log</h2><div id="log">—</div></div>
+</div><script>
+let BASE=localStorage.getItem('nx_viewer_url')||'';
+document.getElementById('url').value=BASE;
+function save(){BASE=document.getElementById('url').value.trim().replace(/\/$/,'');localStorage.setItem('nx_viewer_url',BASE);poll();}
+async function ctl(cmd){ if(!BASE)return; try{await fetch(`${BASE}/engine/control?cmd=${cmd}`);}catch(e){} setTimeout(poll,400); }
+const money=n=>`${n>=0?'+':''}$${(n||0).toFixed(2)}`;
+const cls=n=>n>=0?'pos':'neg';
+async function poll(){
+  const c=document.getElementById('conn'); if(!BASE){c.textContent='no url';return;}
+  let s; try{ s=await (await fetch(`${BASE}/engine/state`,{signal:AbortSignal.timeout(8000)})).json(); }
+  catch(e){ c.innerHTML='<span class="dot" style="background:var(--rd)"></span>offline'; return; }
+  c.innerHTML=`<span class="dot" style="background:var(--g)"></span>live`;
+  const P=s.portfolio||{}, R=s.runtime||{}, reg=s.regime||{}, mk=s.macro||{};
+  document.getElementById('stats').innerHTML=[
+    ['Equity',`$${(P.currentEquity||0).toFixed(0)}`],
+    ['Realized P&L',money(P.realizedPnL),cls(P.realizedPnL)],
+    ['Open',`${(s.open||[]).length}`],
+    ['AUTO',s.autoMode?'<span class="pos">ON</span>':'<span class="neg">OFF</span>'],
+    ['Mode',R.dryRun?'<span class="tag">DRY_RUN</span>':'<span class="neg">LIVE</span>'+(R.testnet?' testnet':' MAINNET')],
+    ['Regime',`${reg.regimeStress||'—'}`],
+    ['F&G',`${mk.fearGreed??'—'}`],
+    ['Streak',`${P.winStreak?('W'+P.winStreak):P.lossStreak?('L'+P.lossStreak):'0'}`],
+  ].map(([k,v,c])=>`<div class="card"><div class="k">${k}</div><div class="v ${c||''}">${v}</div></div>`).join('');
+  const openRows=(s.open||[]).map(t=>`<tr><td>${t.sym}</td><td>${t.direction}</td><td>${t.leverage}x</td>
+    <td>$${(t.alloc||0).toFixed(0)}</td><td class="${cls(t.pnlPct)}">${(t.pnlPct||0).toFixed(1)}%</td>
+    <td class="${cls(t.pnlUSD)}">${money(t.pnlUSD)}</td><td><span class="tag">${t.aiEval?.action||'—'}</span></td></tr>`).join('');
+  document.getElementById('open').innerHTML=openRows?`<table><tr><th>Sym</th><th>Dir</th><th>Lev</th><th>Alloc</th><th>ROI</th><th>P&L</th><th>Action</th></tr>${openRows}</table>`:'<span style="color:var(--mu)">no open positions</span>';
+  const cl=(s.closed||[]).slice(0,15).map(t=>`<tr><td>${t.sym}</td><td>${t.direction}</td>
+    <td class="${cls(t.pnlUSD)}">${money(t.pnlUSD)}</td><td class="${cls(t.pnlPct)}">${(t.pnlPct||0).toFixed(1)}%</td>
+    <td>${t.holdMin}m</td><td><span class="tag">${t.closeReason||'—'}</span></td></tr>`).join('');
+  document.getElementById('closed').innerHTML=cl?`<table><tr><th>Sym</th><th>Dir</th><th>P&L</th><th>ROI</th><th>Hold</th><th>Reason</th></tr>${cl}</table>`:'<span style="color:var(--mu)">no closed trades yet</span>';
+  document.getElementById('log').textContent=(s.log||[]).join('\n');
+}
+setInterval(poll,4000); poll();
+</script></body></html>

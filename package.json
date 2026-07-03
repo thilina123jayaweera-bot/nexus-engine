@@ -1,0 +1,9 @@
+{
+  "name": "nexus-engine",
+  "version": "1.0.0",
+  "description": "Headless server-side NEXUS trading engine (browser becomes a viewer)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.16.0" }
+}
